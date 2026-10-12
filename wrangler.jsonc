@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "nfc-digital-card",
+  "name": "nfc-card",
   "main": ".open-next/worker.js",
   "compatibility_date": "2024-12-30",
   "compatibility_flags": ["nodejs_compat"],
@@ -9,6 +9,6 @@
     "binding": "ASSETS"
   },
   "vars": {
-    "NEXT_PUBLIC_APP_URL": "https://nfc-digital-card.pages.dev"
+    "NEXT_PUBLIC_APP_URL": "https://nfc-card.kitemediaconcept.workers.dev"
   }
 }

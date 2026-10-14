@@ -1,20 +1,9 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
-
 export const metadata: Metadata = {
-  title: 'SmartNFC | Dynamic NFC Digital Business Card Platform',
-  description: 'The modern NFC digital business card platform. Single tap contact sharing with zero-rewrite permanent chip redirects, rich mobile-first profiles, and real-time privacy-conscious analytics.',
+  title: 'NFC Card | Minimal Contactless Digital Business Card',
+  description: 'Share your contact details with a single tap. Minimalist matte black contactless NFC card with instant cloud redirection.',
 };
 
 export default function RootLayout({
@@ -23,11 +12,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className="h-full antialiased">
+      <head>
+        <link rel="preconnect" href="https://fonts.cdnfonts.com" />
+        <link href="https://fonts.cdnfonts.com/css/sf-pro-display" rel="stylesheet" />
+      </head>
+      <body className="min-h-full flex flex-col font-sans" style={{ fontFamily: "SF Pro Display, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" }}>
+        {children}
+      </body>
     </html>
   );
 }

@@ -1,32 +1,20 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { SelectedPlanState } from '@/types/pricing';
 import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
-import {
-  User,
-  Building2,
-  Phone,
-  Mail,
-  Globe,
-  MapPin,
-  QrCode as QrIcon,
-  Download,
-  Copy,
-  Check,
-  ExternalLink,
-  Sparkles,
-  Smartphone,
-  Radio,
-  RefreshCw,
-  Palette,
-  ArrowRight,
-  ShieldCheck,
-  Image as ImageIcon,
-  AlertCircle,
-} from 'lucide-react';
-import { ThemeId } from '@/types';
-import { SelectedPlanState } from '@/types/pricing';
+
+interface QuickCustomerCardCreatorProps {
+  selectedPlan: SelectedPlanState | null;
+  onChangePlan?: () => void;
+  paymentDetails?: {
+    transactionId: string;
+    amount: number;
+    planName: string;
+    method: string;
+  } | null;
+}
 
 interface CreatedCardData {
   profile: {
@@ -37,7 +25,6 @@ interface CreatedCardData {
     company_name?: string;
     phone?: string;
     email?: string;
-    theme: ThemeId;
   };
   card: {
     id: string;
@@ -49,711 +36,993 @@ interface CreatedCardData {
   activationCode: string;
 }
 
-interface QuickCustomerCardCreatorProps {
-  selectedPlan: SelectedPlanState | null;
-  onChangePlan?: () => void;
-}
-
 export default function QuickCustomerCardCreator({
   selectedPlan,
   onChangePlan,
+  paymentDetails,
 }: QuickCustomerCardCreatorProps) {
-  const nameInputRef = useRef<HTMLInputElement>(null);
-  const [fullName, setFullName] = useState('');
-  const [title, setTitle] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [whatsapp, setWhatsapp] = useState('');
-  const [email, setEmail] = useState('');
-  const [website, setWebsite] = useState('');
-  const [street, setStreet] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [country, setCountry] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('');
-  const [theme, setTheme] = useState<ThemeId>('modern-navy');
+  // Form fields matching the user's provided code and screenshot
+  const [fullName, setFullName] = useState('Alex Carter');
+  const [jobTitle, setJobTitle] = useState('Product Designer');
+  const [company, setCompany] = useState('Carter Studio');
+  const [phone, setPhone] = useState('+1 415 555 0199');
+  const [whatsapp, setWhatsapp] = useState('+1 415 555 0199');
+  const [email, setEmail] = useState('alex@carterstudio.com');
+  const [address, setAddress] = useState('123 Mission Street, Suite 400');
+  const [city, setCity] = useState('San Francisco');
+  const [postal, setPostal] = useState('94103');
+  const [website, setWebsite] = useState('https://carterstudio.com');
+  const [instagram, setInstagram] = useState('@alexcarter');
+  const [linkedin, setLinkedin] = useState('linkedin.com/in/alexcarter');
+  const [bio, setBio] = useState('Product designer focused on simple, meaningful digital experiences.');
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Photo upload - initialized with portrait matching user's screenshot
+  const [photo, setPhoto] = useState<string>(
+    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80'
+  );
+  const photoVersionRef = useRef<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Status feedback
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+
+  // Result dialog / card created
   const [result, setResult] = useState<CreatedCardData | null>(null);
+  const [qrPngUrl, setQrPngUrl] = useState<string>('');
 
-  const [qrSvg, setQrSvg] = useState<string>('');
-  const [qrPngDataUrl, setQrPngDataUrl] = useState<string>('');
-  const [copiedNfcUrl, setCopiedNfcUrl] = useState(false);
-  const [copiedProfileUrl, setCopiedProfileUrl] = useState(false);
-  const [nfcWriteStatus, setNfcWriteStatus] = useState<string | null>(null);
+  // Storage key
+  const storageKey = 'nfc-profile-draft-v1';
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Photo must be less than 5MB.');
-      return;
+  // Compute initials
+  const initials = (fullName || 'Your Name')
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase();
+
+  // Helper safe URLs
+  const safeUrl = (value: string) => {
+    if (!value) return '';
+    try {
+      const source = /^[a-z][a-z0-9+.-]*:/i.test(value) ? value : 'https://' + value;
+      const url = new URL(source);
+      if (!['http:', 'https:'].includes(url.protocol)) return '';
+      if (!url.hostname || url.username || url.password) return '';
+      return url.href;
+    } catch {
+      return '';
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setAvatarUrl(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  const instagramUrl = (value: string) => {
+    if (!value) return '';
+    if (/^@?[a-z0-9._]+$/i.test(value) && !value.includes('instagram.com')) {
+      return 'https://www.instagram.com/' + encodeURIComponent(value.replace(/^@/, '')) + '/';
+    }
+    const href = safeUrl(value);
+    if (!href) return '';
+    try {
+      const host = new URL(href).hostname;
+      return /(^|\.)instagram\.com$/i.test(host) ? href : '';
+    } catch {
+      return '';
+    }
+  };
 
-    if (!fullName.trim()) {
-      setError('Please enter the customer name to generate your NFC card.');
-      nameInputRef.current?.focus();
-      nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const linkedinUrl = (value: string) => {
+    const href = safeUrl(value);
+    if (!href) return '';
+    try {
+      return /(^|\.)linkedin\.com$/i.test(new URL(href).hostname) ? href : '';
+    } catch {
+      return '';
+    }
+  };
+
+  // Restore saved draft on mount
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+      if (saved && typeof saved === 'object') {
+        if (typeof saved.fullName === 'string') setFullName(saved.fullName);
+        if (typeof saved.jobTitle === 'string') setJobTitle(saved.jobTitle);
+        if (typeof saved.company === 'string') setCompany(saved.company);
+        if (typeof saved.phone === 'string') setPhone(saved.phone);
+        if (typeof saved.whatsapp === 'string') setWhatsapp(saved.whatsapp);
+        if (typeof saved.email === 'string') setEmail(saved.email);
+        if (typeof saved.address === 'string') setAddress(saved.address);
+        if (typeof saved.city === 'string') setCity(saved.city);
+        if (typeof saved.postal === 'string') setPostal(saved.postal);
+        if (typeof saved.website === 'string') setWebsite(saved.website);
+        if (typeof saved.instagram === 'string') setInstagram(saved.instagram);
+        if (typeof saved.linkedin === 'string') setLinkedin(saved.linkedin);
+        if (typeof saved.bio === 'string') setBio(saved.bio);
+        if (
+          typeof saved.photo === 'string' &&
+          /^data:image\/(?:jpeg|png);base64,/.test(saved.photo) &&
+          saved.photo.length < 1500000
+        ) {
+          setPhoto(saved.photo);
+        }
+      }
+    } catch {
+      // Ignored
+    }
+  }, []);
+
+  // Center crop photo upload
+  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const version = ++photoVersionRef.current;
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      setStatusMessage('Please select a JPG or PNG image.');
+      setIsError(true);
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setStatusMessage('Please select an image smaller than 5 MB.');
+      setIsError(true);
+      event.target.value = '';
       return;
     }
 
-    setLoading(true);
+    const url = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+
+      // Center crop and resize to 400x400
+      const size = Math.min(image.naturalWidth, image.naturalHeight);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 400;
+      const context = canvas.getContext('2d');
+      if (!context) return;
+
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, 400, 400);
+      context.drawImage(
+        image,
+        (image.naturalWidth - size) / 2,
+        (image.naturalHeight - size) / 2,
+        size,
+        size,
+        0,
+        0,
+        400,
+        400
+      );
+
+      if (version !== photoVersionRef.current) return;
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      setPhoto(dataUrl);
+      setStatusMessage('Photo updated in the preview.');
+      setIsError(false);
+    } catch {
+      setStatusMessage('This image could not be loaded. Please try another file.');
+      setIsError(true);
+    } finally {
+      URL.revokeObjectURL(url);
+      event.target.value = '';
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    photoVersionRef.current++;
+    setPhoto('');
+    setStatusMessage('Photo removed.');
+    setIsError(false);
+  };
+
+  // Save Draft in localStorage
+  const handleSaveDraft = () => {
+    try {
+      const data = {
+        fullName,
+        jobTitle,
+        company,
+        phone,
+        whatsapp,
+        email,
+        address,
+        city,
+        postal,
+        website,
+        instagram,
+        linkedin,
+        bio,
+        photo,
+      };
+      localStorage.setItem(storageKey, JSON.stringify(data));
+      setStatusMessage('Draft saved in this browser.');
+      setIsError(false);
+    } catch {
+      setStatusMessage('Unable to save in this browser. Storage may be full or disabled.');
+      setIsError(true);
+    }
+  };
+
+  // Download contact as a UTF-8 vCard (.vcf)
+  const handleDownloadVcf = () => {
+    if (!fullName.trim()) {
+      setStatusMessage('Add your full name before downloading your contact.');
+      setIsError(true);
+      return;
+    }
+
+    const escape = (val: string) =>
+      String(val || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/\r\n|\r|\n/g, '\\n')
+        .replace(/;/g, '\\;')
+        .replace(/,/g, '\\,');
+
+    const lines = [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      'FN:' + escape(fullName),
+      'N:;' + escape(fullName) + ';;;',
+    ];
+
+    if (company) lines.push('ORG:' + escape(company));
+    if (jobTitle) lines.push('TITLE:' + escape(jobTitle));
+    if (phone) lines.push('TEL;TYPE=CELL:' + escape(phone));
+    if (email) lines.push('EMAIL:' + escape(email));
+    if (safeUrl(website)) lines.push('URL:' + escape(safeUrl(website)));
+    if (address || city || postal) {
+      lines.push(
+        'ADR;TYPE=WORK:;;' +
+          escape(address) +
+          ';' +
+          escape(city) +
+          ';;' +
+          escape(postal) +
+          ';'
+      );
+    }
+    if (bio) lines.push('NOTE:' + escape(bio));
+    lines.push('END:VCARD');
+
+    // Fold long lines at 75 UTF-8 bytes
+    function fold(line: string) {
+      const encoder = new TextEncoder();
+      let output = '';
+      let bytes = 0;
+      for (const character of line) {
+        const length = encoder.encode(character).length;
+        if (bytes + length > 75) {
+          output += '\r\n ';
+          bytes = 1;
+        }
+        output += character;
+        bytes += length;
+      }
+      return output;
+    }
+
+    const blob = new Blob([lines.map(fold).join('\r\n') + '\r\n'], {
+      type: 'text/vcard;charset=utf-8',
+    });
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = (fullName.replace(/[^\p{L}\p{N}_-]+/gu, '_') || 'contact') + '.vcf';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  // Form Submit & Publish
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusMessage(null);
+    setIsError(false);
+
+    if (!fullName.trim()) {
+      setStatusMessage('Add your full name before publishing.');
+      setIsError(true);
+      return;
+    }
+
+    setPublishing(true);
     try {
       const res = await fetch('/api/quick-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           full_name: fullName.trim(),
-          title: title.trim(),
-          company_name: companyName.trim(),
+          title: jobTitle.trim(),
+          company_name: company.trim(),
           phone: phone.trim(),
           whatsapp: whatsapp.trim() || phone.trim(),
           email: email.trim(),
           website: website.trim(),
-          street: street.trim(),
+          street: address.trim(),
           city: city.trim(),
-          state: state.trim(),
-          country: country.trim(),
-          avatar_url: avatarUrl,
-          theme,
-          card_type: selectedPlan?.cardTitle || 'PVC CARD',
-          plan_duration: selectedPlan?.tier.name || '1-Year Plan',
-          plan_price: selectedPlan?.tier.discountedPrice || 1399,
+          state: '',
+          country: postal.trim(),
+          avatar_url: photo,
+          theme: 'modern-navy',
+          card_type: 'NFC CARD',
+          plan_duration: selectedPlan?.tier.name || '1 Year Plan',
+          plan_price: selectedPlan?.tier.discountedPrice || 801,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to create customer card.');
+        throw new Error(data.error || 'Publish failed');
       }
 
       setResult(data);
 
-      // Generate visual QR code for permanent NFC URL
-      const svg = await QRCode.toString(data.permanentNfcUrl, {
-        type: 'svg',
-        margin: 2,
-        color: { dark: '#484640', light: '#ffffff' },
-      });
-      setQrSvg(svg);
-
-      const png = await QRCode.toDataURL(data.permanentNfcUrl, {
+      const qr = await QRCode.toDataURL(data.permanentNfcUrl, {
         width: 1024,
         margin: 2,
-        color: { dark: '#484640', light: '#ffffff' },
+        color: { dark: '#111111', light: '#ffffff' },
       });
-      setQrPngDataUrl(png);
+      setQrPngUrl(qr);
 
       try {
         confetti({
-          particleCount: 90,
-          spread: 75,
+          particleCount: 100,
+          spread: 80,
           origin: { y: 0.6 },
-          colors: ['#995b40', '#d5c5ac', '#8c7e74', '#45403e'],
         });
       } catch {
         // Ignored
       }
+
+      setStatusMessage('Your profile has been published. NFC card is activated!');
+      setIsError(false);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error creating card';
-      setError(msg);
+      const msg = err instanceof Error ? err.message : 'Publishing failed. Please check connection.';
+      setStatusMessage(msg);
+      setIsError(true);
     } finally {
-      setLoading(false);
+      setPublishing(false);
     }
   };
 
-  const handleDownloadPng = () => {
-    if (!qrPngDataUrl || !result) return;
-    const a = document.createElement('a');
-    a.href = qrPngDataUrl;
-    a.download = `${result.profile.slug}-nfc-qr.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
+  // Formatted detail values for preview
+  const phoneDigits = phone.replace(/[^\d+]/g, '');
+  const waDigits = whatsapp.replace(/\D/g, '');
+  const formattedAddress = [address, city, postal].filter(Boolean).join(', ');
+  const webHref = safeUrl(website);
+  const igHref = instagramUrl(instagram);
+  const liHref = linkedinUrl(linkedin);
 
-  const handleDownloadSvg = () => {
-    if (!qrSvg || !result) return;
-    const blob = new Blob([qrSvg], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${result.profile.slug}-nfc-qr.svg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleCopyNfcUrl = () => {
-    if (!result) return;
-    navigator.clipboard.writeText(result.permanentNfcUrl);
-    setCopiedNfcUrl(true);
-    setTimeout(() => setCopiedNfcUrl(false), 2000);
-  };
-
-  const handleCopyProfileUrl = () => {
-    if (!result) return;
-    navigator.clipboard.writeText(result.profileUrl);
-    setCopiedProfileUrl(true);
-    setTimeout(() => setCopiedProfileUrl(false), 2000);
-  };
-
-  const handleWebNfcWrite = async () => {
-    if (!result) return;
-    if (!('NDEFReader' in window)) {
-      alert(
-        'Direct Web NFC is supported in Chrome on Android. For other devices, copy the Permanent NFC URL and write it using the free "NFC Tools" app.'
-      );
-      return;
-    }
-
-    try {
-      setNfcWriteStatus('Ready: Hold physical card to the back of phone...');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ndef = new (window as any).NDEFReader();
-      await ndef.write({
-        records: [{ recordType: 'url', data: result.permanentNfcUrl }],
-      });
-      setNfcWriteStatus('Success! Physical NFC Card written successfully.');
-      setTimeout(() => setNfcWriteStatus(null), 3500);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Write failed';
-      setNfcWriteStatus(`Error: ${msg}`);
-      setTimeout(() => setNfcWriteStatus(null), 4000);
-    }
-  };
-
-  const handleReset = () => {
-    setResult(null);
-    setFullName('');
-    setTitle('');
-    setCompanyName('');
-    setPhone('');
-    setWhatsapp('');
-    setEmail('');
-    setWebsite('');
-    setStreet('');
-    setCity('');
-    setState('');
-    setCountry('');
-    setAvatarUrl('');
-    setQrSvg('');
-    setQrPngDataUrl('');
-  };
+  const hasAnyDetail = Boolean(
+    company || formattedAddress || igHref || liHref || webHref
+  );
 
   return (
-    <div id="add-customer" className="w-full max-w-4xl mx-auto scroll-mt-24">
-      {result ? (
-        /* SUCCESS RESULT STATE: Shows Generated QR Code, Permanent NFC URL, and Downloads */
-        <div className="bg-white rounded-3xl p-6 sm:p-10 border border-[#484640]/10 shadow-[0_20px_50px_rgba(84,66,54,0.08)] animate-in zoom-in-95 duration-200 text-[#484640]">
-          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#f3ddd6] border border-[#e8bdb0] text-[#995b40] text-xs font-bold mb-4">
-            <Check className="w-3.5 h-3.5" />
-            <span>Customer Added & NFC Card Generated Successfully!</span>
-          </div>
+    <div className="w-full bg-white text-[#111]">
+      {/* SHARED SVG SYMBOLS MATCHING USER'S CODE */}
+      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+        <defs>
+          <symbol id="i-user" viewBox="0 0 24 24">
+            <circle cx="12" cy="7" r="4" />
+            <path d="M4 21v-2a8 8 0 0 1 16 0v2Z" />
+          </symbol>
+          <symbol id="i-camera" viewBox="0 0 24 24">
+            <path d="M4 6h4l2-3h4l2 3h4v15H4Z" />
+            <circle cx="12" cy="13" r="4" />
+          </symbol>
+          <symbol id="i-phone" viewBox="0 0 24 24">
+            <path d="m7 3 3 5-3 3a15 15 0 0 0 6 6l3-3 5 3c-1 5-4 5-8 3A23 23 0 0 1 4 11C2 7 2 4 7 3Z" />
+          </symbol>
+          <symbol id="i-mail" viewBox="0 0 24 24">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="m3 6 9 7 9-7" />
+          </symbol>
+          <symbol id="i-link" viewBox="0 0 24 24">
+            <path
+              d="m10 14 4-4M8 16l-1 1a4 4 0 0 1-6-6l5-5a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-5 5a4 4 0 0 1-6 0"
+              transform="translate(1 0) scale(.9)"
+            />
+          </symbol>
+          <symbol id="i-chat" viewBox="0 0 24 24">
+            <path d="M21 11a9 9 0 0 1-13 8l-5 2 1-5A9 9 0 1 1 21 11Z" />
+            <path d="M8 7c0 5 3 8 8 8" />
+          </symbol>
+          <symbol id="i-building" viewBox="0 0 24 24">
+            <path d="M5 21V3h11v18M16 9h4v12M3 21h19M9 7h3M9 11h3M9 15h3M9 21v-3h3v3" />
+          </symbol>
+          <symbol id="i-pin" viewBox="0 0 24 24">
+            <path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 0 1 14 0Z" />
+            <circle cx="12" cy="10" r="2" />
+          </symbol>
+          <symbol id="i-instagram" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="5" />
+            <circle cx="12" cy="12" r="4" />
+            <path d="M17.5 6.5h.01" />
+          </symbol>
+          <symbol id="i-linkedin" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M7 10v7M7 7h.01M11 17v-7m0 3c0-4 6-4 6 0v4" />
+          </symbol>
+          <symbol id="i-contact" viewBox="0 0 24 24">
+            <rect x="4" y="3" width="16" height="18" rx="2" />
+            <circle cx="12" cy="9" r="3" />
+            <path d="M8 18v-1a4 4 0 0 1 8 0v1" />
+          </symbol>
+          <symbol id="i-battery" viewBox="0 0 24 24">
+            <rect x="2" y="7" width="18" height="10" rx="2" />
+            <path d="M23 10v4M5 10h12v4H5Z" />
+          </symbol>
+        </defs>
+      </svg>
 
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-            {/* Left: QR Code Display & Downloads */}
-            <div className="md:col-span-5 flex flex-col items-center text-center bg-[#faf7f3] p-6 rounded-3xl border border-[#484640]/10">
-              <span className="text-xs font-bold text-[#89817b] uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <QrIcon className="w-4 h-4 text-[#995b40]" />
-                <span>NFC Permanent QR Code</span>
+      {/* PAYMENT CONFIRMATION BADGE (DISPLAYED AFTER PAYMENT) */}
+      {paymentDetails && (
+        <div className="max-w-[1320px] mx-auto px-7 pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 px-5 rounded-2xl bg-emerald-50/90 border border-emerald-200/80 text-emerald-950 shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
+                Payment Confirmed
               </span>
-
-              {/* The Visual QR Code Image */}
-              <div className="w-56 h-56 p-3 rounded-2xl bg-white border border-[#484640]/10 shadow-sm flex items-center justify-center mb-4 [&>svg]:w-full [&>svg]:h-full">
-                {qrSvg && <div dangerouslySetInnerHTML={{ __html: qrSvg }} className="w-full h-full" />}
-              </div>
-
-              <p className="text-xs text-[#89817b] font-medium mb-4">
-                Scan with smartphone camera or link to physical card
-              </p>
-
-              {/* QR Download Buttons */}
-              <div className="w-full grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={handleDownloadPng}
-                  className="py-2.5 px-3 rounded-xl bg-[#995b40] hover:bg-[#814a33] text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-[#995b40]/20 transition-all active:scale-95"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download PNG</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadSvg}
-                  className="py-2.5 px-3 rounded-xl bg-[#484640] hover:bg-[#383632] text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Vector SVG</span>
-                </button>
-              </div>
+              <span className="text-xs font-semibold text-emerald-800">
+                • {paymentDetails.planName} (<span className="currency-sym">र</span>{paymentDetails.amount.toLocaleString()} via {paymentDetails.method})
+              </span>
+              <span className="text-[11px] font-mono text-emerald-700 hidden sm:inline">
+                ID: {paymentDetails.transactionId}
+              </span>
             </div>
 
-            {/* Right: Card Details & URLs */}
-            <div className="md:col-span-7 space-y-5">
-              <div>
-                <h2 className="text-2xl font-bold text-[#484640] tracking-tight">
-                  {result.profile.full_name}
-                </h2>
-                <p className="text-sm text-[#89817b] mt-0.5">
-                  {result.profile.title || 'Digital Business Card'}{' '}
-                  {result.profile.company_name ? `• ${result.profile.company_name}` : ''}
-                </p>
-              </div>
-
-              {/* Permanent NFC URL Box */}
-              <div className="p-4 rounded-2xl bg-[#f3ddd6]/40 border border-[#e8bdb0] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#995b40] uppercase tracking-wider flex items-center gap-1">
-                    <Radio className="w-3.5 h-3.5 text-[#995b40]" />
-                    <span>Permanent NFC Card URL</span>
-                  </span>
-                  <span className="text-[10px] text-[#995b40] bg-[#faf7f3] border border-[#e8bdb0] font-bold px-2 py-0.5 rounded-full">
-                    Active & Ready
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-[#e8bdb0]">
-                  <span className="font-mono text-xs text-[#995b40] font-semibold truncate">
-                    {result.permanentNfcUrl}
-                  </span>
-                  <button
-                    onClick={handleCopyNfcUrl}
-                    className="p-1.5 rounded-lg bg-[#faf7f3] hover:bg-[#f3ddd6] text-[#995b40] text-xs font-semibold flex items-center gap-1 shrink-0 transition-colors"
-                  >
-                    {copiedNfcUrl ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedNfcUrl ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-                <p className="text-[11px] text-[#89817b]">
-                  Write this URL to any standard NFC chip. You can update profile info anytime without ever rewriting the physical chip!
-                </p>
-              </div>
-
-              {/* Public Profile URL */}
-              <div className="p-4 rounded-2xl bg-[#faf7f3] border border-[#484640]/10 space-y-2">
-                <span className="text-xs font-bold text-[#484640] uppercase tracking-wider flex items-center gap-1">
-                  <Globe className="w-3.5 h-3.5 text-[#89817b]" />
-                  <span>Public Web Profile URL</span>
-                </span>
-                <div className="flex items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-[#484640]/10">
-                  <span className="font-mono text-xs text-[#484640] font-medium truncate">
-                    {result.profileUrl}
-                  </span>
-                  <button
-                    onClick={handleCopyProfileUrl}
-                    className="p-1.5 rounded-lg bg-[#faf7f3] hover:bg-slate-100 text-[#484640] text-xs font-semibold flex items-center gap-1 shrink-0 transition-colors"
-                  >
-                    {copiedProfileUrl ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedProfileUrl ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Action Buttons Hub */}
-              <div className="pt-2 flex flex-wrap gap-2.5">
-                <a
-                  href={result.profileUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-4 py-2.5 rounded-xl bg-[#995b40] hover:bg-[#814a33] text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-[#995b40]/20 transition-all active:scale-95"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Open Live Profile</span>
-                </a>
-
-                <a
-                  href={`/p/${result.profile.slug}/vcard`}
-                  className="px-4 py-2.5 rounded-xl bg-white border border-[#484640]/15 hover:bg-[#faf7f3] text-[#484640] font-semibold text-xs flex items-center gap-1.5 transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download .VCF Contact</span>
-                </a>
-
-                <button
-                  type="button"
-                  onClick={handleWebNfcWrite}
-                  className="px-4 py-2.5 rounded-xl bg-[#484640] hover:bg-[#383632] text-white font-semibold text-xs flex items-center gap-1.5 transition-colors"
-                >
-                  <Smartphone className="w-3.5 h-3.5 text-[#d5c5ac]" />
-                  <span>Write to NFC Chip</span>
-                </button>
-              </div>
-
-              {nfcWriteStatus && (
-                <div className="p-3 rounded-xl bg-[#484640] text-white text-xs font-medium animate-pulse">
-                  {nfcWriteStatus}
-                </div>
-              )}
-
-              <div className="pt-3 border-t border-[#484640]/10 flex justify-between items-center">
-                <span className="text-xs text-[#89817b]">
-                  Card Token: <code className="font-mono text-[#484640]">{result.card.card_token}</code>
-                </span>
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="text-xs font-semibold text-[#995b40] hover:text-[#814a33] flex items-center gap-1"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>+ Add Another Customer Card</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : !selectedPlan ? (
-        /* GATED STATE: Show invitation to pick card plan first (Requirement: "താഴത്തെ ആ ഫോം തൽക്കാലം റിമൂവ് ചെയ്യണം") */
-        <div className="bg-white rounded-3xl p-8 sm:p-12 border border-[#484640]/10 shadow-[0_20px_50px_rgba(84,66,54,0.06)] text-center max-w-2xl mx-auto">
-          <div className="w-14 h-14 rounded-2xl bg-[#f3ddd6] text-[#995b40] mx-auto flex items-center justify-center mb-4 shadow-sm">
-            <Sparkles className="w-7 h-7" />
-          </div>
-          <span className="text-[11px] font-bold tracking-[2.5px] uppercase text-[#995b40] bg-[#f3ddd6] px-3.5 py-1 rounded-full">
-            Step 1 of 2
-          </span>
-          <h3 className="text-2xl sm:text-3xl font-extrabold text-[#484640] tracking-tight mt-3 mb-2">
-            Select Your Card & Plan First
-          </h3>
-          <p className="text-xs sm:text-sm text-[#89817b] leading-relaxed max-w-md mx-auto mb-6">
-            Choose from the <strong>PVC Card</strong>, <strong>Eco-Friendly Wooden Card</strong>, or <strong>Premium Metal Card</strong> above to view pricing and unlock personalization.
-          </p>
-          <a
-            href="#pricing-plans"
-            className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-[#484640] hover:bg-[#383632] text-white text-xs font-bold uppercase tracking-wider shadow-md transition-all active:scale-95"
-          >
-            <span>Choose Your Plan Above ↑</span>
-            <ArrowRight className="w-4 h-4" />
-          </a>
-        </div>
-      ) : (
-        /* INPUT FORM STATE: Clean, User-Friendly & Minimal Luxury */
-        <div className="bg-white rounded-3xl p-6 sm:p-10 border border-[#484640]/10 shadow-[0_20px_50px_rgba(84,66,54,0.06)] text-[#484640] animate-in fade-in slide-in-from-top-4 duration-300">
-          {/* Selected Plan Summary Banner */}
-          <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-zinc-950 text-white border border-emerald-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-black text-sm sm:text-base text-white tracking-wide">
-                    {selectedPlan.cardTitle}
-                  </span>
-                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500 text-black uppercase">
-                    {selectedPlan.tier.name}
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  {selectedPlan.tier.features.join(' • ')}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4 self-end sm:self-center">
-              <div className="text-right">
-                <span className="block text-xs text-zinc-500 line-through font-mono">
-                  <span className="currency-sym">₹</span>{selectedPlan.tier.originalPrice}
-                </span>
-                <span className="text-lg sm:text-xl font-black text-emerald-400 font-mono">
-                  <span className="currency-sym">₹</span>{selectedPlan.tier.discountedPrice}
-                </span>
-              </div>
+            {onChangePlan && (
               <button
                 type="button"
-                onClick={() => {
-                  if (onChangePlan) {
-                    onChangePlan();
-                  } else {
-                    const el = document.getElementById('pricing-plans');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  }
-                }}
-                className="text-xs font-bold text-emerald-400 hover:text-emerald-300 underline underline-offset-4 transition-colors"
+                onClick={onChangePlan}
+                className="text-xs font-semibold text-emerald-800 hover:text-emerald-950 underline underline-offset-4"
               >
-                Change
+                Change Plan
               </button>
-            </div>
+            )}
           </div>
-
-          <div className="mb-6 pb-4 border-b border-[#484640]/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f3ddd6] text-[#995b40] text-xs font-bold mb-2">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Step 2: Personalize Your Business Card</span>
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#484640]">
-                Customer Information & Instant QR Setup
-              </h2>
-              <p className="text-xs sm:text-sm text-[#89817b] mt-1">
-                Fill in the customer details below. The system will instantly generate the live profile, permanent NFC redirect URL, and high-res vector QR code.
-              </p>
-            </div>
-          </div>
-
-          {error && (
-            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium mb-6">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Section 1: Customer Info */}
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold text-[#89817b] uppercase tracking-wider flex items-center gap-1.5">
-                <User className="w-4 h-4 text-[#995b40]" />
-                <span>1. Personal & Company Information</span>
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-[#484640] mb-1">
-                    Customer Name <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    ref={nameInputRef}
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="e.g. Mohammed Faisal"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#484640]/15 text-sm focus:outline-none focus:ring-2 focus:ring-[#995b40] bg-[#faf7f3]/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#484640] mb-1">
-                    Job Title / Designation
-                  </label>
-                  <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. Managing Director"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#484640]/15 text-sm focus:outline-none focus:ring-2 focus:ring-[#995b40] bg-[#faf7f3]/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#484640] mb-1">
-                    Company / Business Name
-                  </label>
-                  <input
-                    type="text"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="e.g. Skyline Enterprises"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#484640]/15 text-sm focus:outline-none focus:ring-2 focus:ring-[#995b40] bg-[#faf7f3]/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#484640] mb-1">
-                    Profile Photo (Optional)
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="w-full text-xs text-[#89817b] file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-[#f3ddd6] file:text-[#995b40] hover:file:bg-[#e8bdb0]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Section 2: Contact Numbers & Links */}
-            <div className="space-y-4 pt-4 border-t border-[#484640]/10">
-              <h3 className="text-xs font-bold text-[#89817b] uppercase tracking-wider flex items-center gap-1.5">
-                <Phone className="w-4 h-4 text-[#995b40]" />
-                <span>2. Contact Details & Social</span>
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-[#484640] mb-1">
-                    Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+91 98765 43210"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#484640]/15 text-sm focus:outline-none focus:ring-2 focus:ring-[#995b40] bg-[#faf7f3]/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#484640] mb-1">
-                    WhatsApp Number
-                  </label>
-                  <input
-                    type="tel"
-                    value={whatsapp}
-                    onChange={(e) => setWhatsapp(e.target.value)}
-                    placeholder="+91 98765 43210 (or leave blank if same)"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#484640]/15 text-sm focus:outline-none focus:ring-2 focus:ring-[#995b40] bg-[#faf7f3]/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#484640] mb-1">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="contact@skyline.com"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#484640]/15 text-sm focus:outline-none focus:ring-2 focus:ring-[#995b40] bg-[#faf7f3]/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#484640] mb-1">
-                    Website URL
-                  </label>
-                  <input
-                    type="url"
-                    value={website}
-                    onChange={(e) => setWebsite(e.target.value)}
-                    placeholder="https://skyline.com"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#484640]/15 text-sm focus:outline-none focus:ring-2 focus:ring-[#995b40] bg-[#faf7f3]/50"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Section 3: Office Address */}
-            <div className="space-y-4 pt-4 border-t border-[#484640]/10">
-              <h3 className="text-xs font-bold text-[#89817b] uppercase tracking-wider flex items-center gap-1.5">
-                <MapPin className="w-4 h-4 text-[#995b40]" />
-                <span>3. Location / Office Address</span>
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-[#484640] mb-1">
-                    Street Address / Building
-                  </label>
-                  <input
-                    type="text"
-                    value={street}
-                    onChange={(e) => setStreet(e.target.value)}
-                    placeholder="MG Road, Commercial Complex Suite 4B"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#484640]/15 text-sm focus:outline-none focus:ring-2 focus:ring-[#995b40] bg-[#faf7f3]/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#484640] mb-1">
-                    City
-                  </label>
-                  <input
-                    type="text"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="Kochi / Calicut / Bangalore"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#484640]/15 text-sm focus:outline-none focus:ring-2 focus:ring-[#995b40] bg-[#faf7f3]/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#484640] mb-1">
-                    State & Country
-                  </label>
-                  <input
-                    type="text"
-                    value={state}
-                    onChange={(e) => setState(e.target.value)}
-                    placeholder="Kerala, India"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#484640]/15 text-sm focus:outline-none focus:ring-2 focus:ring-[#995b40] bg-[#faf7f3]/50"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Section 4: Card Color Theme */}
-            <div className="space-y-3 pt-4 border-t border-[#484640]/10">
-              <label className="block text-xs font-bold text-[#89817b] uppercase tracking-wider">
-                4. Select Card Theme
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {[
-                  { id: 'modern-navy', name: 'Modern Navy', hex: '#1e3a8a' },
-                  { id: 'sleek-dark', name: 'Sleek Dark', hex: '#18181b' },
-                  { id: 'emerald-luxury', name: 'Emerald Luxury', hex: '#064e3b' },
-                  { id: 'royal-amethyst', name: 'Royal Amethyst', hex: '#581c87' },
-                ].map((th) => (
-                  <button
-                    key={th.id}
-                    type="button"
-                    onClick={() => setTheme(th.id as ThemeId)}
-                    className={`p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
-                      theme === th.id
-                        ? 'border-[#995b40] bg-[#f3ddd6]/50 ring-2 ring-[#995b40]/30'
-                        : 'border-[#484640]/15 hover:border-[#484640]/30'
-                    }`}
-                  >
-                    <div
-                      className="w-5 h-5 rounded-full border border-black/10 shrink-0"
-                      style={{ backgroundColor: th.hex }}
-                    />
-                    <span className="text-xs font-semibold text-[#484640]">{th.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Primary Action Button */}
-            <div className="pt-4 space-y-3">
-              {error && (
-                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-200">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-4 px-6 rounded-2xl bg-[#995b40] hover:bg-[#814a33] text-white font-bold text-sm flex items-center justify-center gap-2.5 shadow-xl shadow-[#995b40]/25 transition-all active:scale-[0.99] disabled:opacity-70 cursor-pointer"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                    <span>Creating Customer & Generating QR...</span>
-                  </>
-                ) : (
-                  <>
-                    <QrIcon className="w-5 h-5" />
-                    <span>
-                      Generate NFC Card & Instant QR Code
-                      {selectedPlan && (
-                        <>
-                          {' '}• <span className="currency-sym">₹</span>{selectedPlan.tier.discountedPrice}
-                        </>
-                      )}
-                    </span>
-                    <ArrowRight className="w-4 h-4 ml-1" />
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
         </div>
       )}
+
+      {/* MAIN 2-COLUMN LAYOUT: FORM ON LEFT, PHONE PREVIEW ON RIGHT */}
+      <div className="nfc-profile-layout">
+        <section>
+          <h1>Create your profile</h1>
+          <p className="profile-subtitle">Your details. One simple tap.</p>
+
+          <form id="profileForm" onSubmit={handleSubmit}>
+            {/* AVATAR UPLOAD ROW */}
+            <div className="profile-upload-row">
+              <div className="profile-avatar">
+                {photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photo} alt="Your uploaded profile photo" />
+                ) : (
+                  <span className="initials">{initials}</span>
+                )}
+              </div>
+
+              <div className="profile-upload-info">
+                <button
+                  type="button"
+                  className="profile-button"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <svg className="icon" aria-hidden="true">
+                    <use href="#i-camera" />
+                  </svg>
+                  Upload photo
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  onChange={handlePhotoUpload}
+                  hidden
+                />
+                <small>JPG, PNG up to 5 MB</small>
+
+                {photo && (
+                  <button
+                    type="button"
+                    className="profile-button"
+                    onClick={handleRemovePhoto}
+                    style={{ marginTop: '9px', padding: '6px 10px' }}
+                  >
+                    Remove photo
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* FORM INPUT FIELDS */}
+            <div className="profile-fields">
+              <div className="profile-field">
+                <label htmlFor="fullName">Full name *</label>
+                <input
+                  id="fullName"
+                  name="fullName"
+                  required
+                  maxLength={80}
+                  autoComplete="name"
+                  placeholder="Your full name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="profile-input"
+                />
+              </div>
+
+              <div className="profile-field">
+                <label htmlFor="jobTitle">Job title</label>
+                <input
+                  id="jobTitle"
+                  name="jobTitle"
+                  maxLength={80}
+                  autoComplete="organization-title"
+                  placeholder="Product Designer"
+                  value={jobTitle}
+                  onChange={(e) => setJobTitle(e.target.value)}
+                  className="profile-input"
+                />
+              </div>
+
+              <div className="profile-field">
+                <label htmlFor="company">Company</label>
+                <input
+                  id="company"
+                  name="company"
+                  maxLength={100}
+                  autoComplete="organization"
+                  placeholder="Your company"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  className="profile-input"
+                />
+              </div>
+
+              <div className="profile-field">
+                <label htmlFor="phone">Phone number</label>
+                <input
+                  id="phone"
+                  name="phone"
+                  type="tel"
+                  maxLength={25}
+                  autoComplete="tel"
+                  placeholder="+91 98765 43210"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="profile-input"
+                />
+              </div>
+
+              <div className="profile-field">
+                <label htmlFor="whatsapp">WhatsApp number</label>
+                <input
+                  id="whatsapp"
+                  name="whatsapp"
+                  type="tel"
+                  maxLength={25}
+                  placeholder="Include country code"
+                  value={whatsapp}
+                  onChange={(e) => setWhatsapp(e.target.value)}
+                  className="profile-input"
+                />
+              </div>
+
+              <div className="profile-field">
+                <label htmlFor="email">Email address</label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  maxLength={120}
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="profile-input"
+                />
+              </div>
+
+              <div className="profile-field full">
+                <label htmlFor="address">Address</label>
+                <input
+                  id="address"
+                  name="address"
+                  maxLength={200}
+                  autoComplete="street-address"
+                  placeholder="Street, building or office"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="profile-input"
+                />
+              </div>
+
+              <div className="profile-field">
+                <label htmlFor="city">City</label>
+                <input
+                  id="city"
+                  name="city"
+                  maxLength={80}
+                  autoComplete="address-level2"
+                  placeholder="Kozhikode"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  className="profile-input"
+                />
+              </div>
+
+              <div className="profile-field">
+                <label htmlFor="postal">Postal code</label>
+                <input
+                  id="postal"
+                  name="postal"
+                  maxLength={20}
+                  autoComplete="postal-code"
+                  placeholder="673001"
+                  value={postal}
+                  onChange={(e) => setPostal(e.target.value)}
+                  className="profile-input"
+                />
+              </div>
+
+              {/* SOCIAL FIELDS (3 COLUMNS) */}
+              <div className="profile-social-fields">
+                <div className="profile-field">
+                  <label htmlFor="website">Website</label>
+                  <input
+                    id="website"
+                    name="website"
+                    maxLength={300}
+                    placeholder="example.com"
+                    inputMode="url"
+                    value={website}
+                    onChange={(e) => setWebsite(e.target.value)}
+                    className="profile-input"
+                  />
+                </div>
+
+                <div className="profile-field">
+                  <label htmlFor="instagram">Instagram</label>
+                  <input
+                    id="instagram"
+                    name="instagram"
+                    maxLength={300}
+                    placeholder="@username"
+                    value={instagram}
+                    onChange={(e) => setInstagram(e.target.value)}
+                    className="profile-input"
+                  />
+                </div>
+
+                <div className="profile-field">
+                  <label htmlFor="linkedin">LinkedIn</label>
+                  <input
+                    id="linkedin"
+                    name="linkedin"
+                    maxLength={300}
+                    placeholder="linkedin.com/in/username"
+                    inputMode="url"
+                    value={linkedin}
+                    onChange={(e) => setLinkedin(e.target.value)}
+                    className="profile-input"
+                  />
+                </div>
+              </div>
+
+              {/* BIO FULL WIDTH */}
+              <div className="profile-field full">
+                <label htmlFor="bio">Bio</label>
+                <textarea
+                  id="bio"
+                  name="bio"
+                  maxLength={160}
+                  placeholder="Tell people a little about yourself"
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  className="profile-textarea"
+                />
+                <div className="profile-counter">
+                  <span>{bio.length}</span>/160
+                </div>
+              </div>
+            </div>
+
+            {/* ACTION BUTTONS */}
+            <div className="profile-actions">
+              <button
+                type="button"
+                className="profile-button"
+                id="saveDraft"
+                onClick={handleSaveDraft}
+              >
+                Save draft
+              </button>
+              <button
+                type="submit"
+                className="profile-button black"
+                disabled={publishing}
+              >
+                {publishing ? 'Publishing…' : 'Save & publish'}
+              </button>
+            </div>
+
+            <p className="profile-note">
+              Drafts are saved in this browser. Online publishing activates your permanent NFC redirect and high-res vector QR code.
+            </p>
+
+            {statusMessage && (
+              <p
+                id="status"
+                className={`profile-status ${isError ? 'error' : ''}`}
+                role="status"
+                aria-live="polite"
+              >
+                {statusMessage}
+              </p>
+            )}
+          </form>
+
+          {/* SUCCESS RESULT CARD UPON PUBLISHING */}
+          {result && (
+            <div className="mt-8 p-6 rounded-2xl bg-neutral-50 border border-neutral-200/90 shadow-sm animate-in fade-in duration-300">
+              <div className="flex items-center gap-2 text-emerald-600 mb-2 font-semibold text-sm">
+                <svg className="icon w-4 h-4 text-emerald-600" viewBox="0 0 24 24">
+                  <path d="M20 6 9 17l-5-5" strokeWidth="2.5" />
+                </svg>
+                <span>NFC Card Activated & Ready</span>
+              </div>
+              <p className="text-xs text-neutral-600 mb-4 leading-relaxed">
+                Permanent NFC Redirect:{' '}
+                <a
+                  href={result.permanentNfcUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-mono text-neutral-900 underline font-semibold"
+                >
+                  {result.permanentNfcUrl}
+                </a>
+              </p>
+
+              <div className="flex flex-wrap items-center gap-4">
+                {qrPngUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={qrPngUrl}
+                    alt="QR Code"
+                    className="w-24 h-24 rounded-lg border bg-white p-1"
+                  />
+                )}
+
+                <div className="space-y-2">
+                  <a
+                    href={result.profileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-900 text-white text-xs font-medium hover:bg-neutral-800"
+                  >
+                    <span>View Live Digital Profile</span>
+                    <svg className="icon w-3.5 h-3.5" viewBox="0 0 24 24">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" />
+                    </svg>
+                  </a>
+
+                  {qrPngUrl && (
+                    <a
+                      href={qrPngUrl}
+                      download={`${result.profile.slug}-qr.png`}
+                      className="block text-xs font-semibold text-neutral-700 hover:text-neutral-950 underline"
+                    >
+                      Download High-Res QR Code (.png)
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* RIGHT COLUMN: STICKY IPHONE PREVIEW */}
+        <aside className="phone-preview-column" id="preview" aria-label="Live profile preview">
+          <div className="phone-device">
+            <div className="phone-screen">
+              {/* STATUS BAR + DYNAMIC ISLAND */}
+              <div className="phone-header-top" aria-hidden="true">
+                <span>9:41</span>
+                <span className="phone-island" />
+                <span className="phone-signals">
+                  <svg className="icon">
+                    <use href="#i-battery" />
+                  </svg>
+                </span>
+              </div>
+
+              {/* PROFILE SCREEN BODY */}
+              <div className="phone-profile-body">
+                <div className="phone-profile-head">
+                  <div className="profile-avatar">
+                    {photo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img id="previewPhoto" src={photo} alt="Profile photo" />
+                    ) : (
+                      <span className="initials" id="previewInitials">
+                        {initials}
+                      </span>
+                    )}
+                  </div>
+
+                  <h2 id="previewName">{fullName || 'Your Name'}</h2>
+                  {jobTitle && <p className="phone-profile-role">{jobTitle}</p>}
+                  {company && <p className="phone-profile-company">{company}</p>}
+                  {bio && <p className="phone-profile-bio">{bio}</p>}
+                </div>
+
+                {/* SAVE CONTACT BUTTON */}
+                <button
+                  type="button"
+                  className="profile-button black phone-save-contact"
+                  id="downloadVcf"
+                  onClick={handleDownloadVcf}
+                >
+                  <svg className="icon" aria-hidden="true">
+                    <use href="#i-contact" />
+                  </svg>
+                  Save Contact
+                </button>
+
+                {/* QUICK ACTION BUTTONS */}
+                <div className="phone-quick-links">
+                  {phoneDigits && (
+                    <a href={`tel:${phoneDigits}`} className="phone-quick-link" id="callLink">
+                      <span>
+                        <svg className="icon" aria-hidden="true">
+                          <use href="#i-phone" />
+                        </svg>
+                      </span>
+                      Call
+                    </a>
+                  )}
+
+                  {email && (
+                    <a
+                      href={`mailto:${encodeURIComponent(email)}`}
+                      className="phone-quick-link"
+                      id="emailLink"
+                    >
+                      <span>
+                        <svg className="icon" aria-hidden="true">
+                          <use href="#i-mail" />
+                        </svg>
+                      </span>
+                      Email
+                    </a>
+                  )}
+
+                  {webHref && (
+                    <a
+                      href={webHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="phone-quick-link"
+                      id="websiteLink"
+                    >
+                      <span>
+                        <svg className="icon" aria-hidden="true">
+                          <use href="#i-link" />
+                        </svg>
+                      </span>
+                      Website
+                    </a>
+                  )}
+
+                  {waDigits && (
+                    <a
+                      href={`https://wa.me/${waDigits}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="phone-quick-link"
+                      id="whatsappLink"
+                    >
+                      <span>
+                        <svg className="icon" aria-hidden="true">
+                          <use href="#i-chat" />
+                        </svg>
+                      </span>
+                      WhatsApp
+                    </a>
+                  )}
+                </div>
+
+                {/* DETAIL LIST */}
+                {hasAnyDetail && (
+                  <div className="phone-detail-list" id="detailList">
+                    {company && (
+                      <div className="phone-detail-item" id="companyRow">
+                        <svg className="icon" aria-hidden="true">
+                          <use href="#i-building" />
+                        </svg>
+                        <span id="companyText">{company}</span>
+                      </div>
+                    )}
+
+                    {formattedAddress && (
+                      <a
+                        className="phone-detail-item"
+                        id="addressRow"
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                          formattedAddress
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <svg className="icon" aria-hidden="true">
+                          <use href="#i-pin" />
+                        </svg>
+                        <span id="addressText">{formattedAddress}</span>
+                      </a>
+                    )}
+
+                    {igHref && (
+                      <a
+                        className="phone-detail-item"
+                        id="instagramRow"
+                        href={igHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <svg className="icon" aria-hidden="true">
+                          <use href="#i-instagram" />
+                        </svg>
+                        <span id="instagramText">{instagram}</span>
+                      </a>
+                    )}
+
+                    {liHref && (
+                      <a
+                        className="phone-detail-item"
+                        id="linkedinRow"
+                        href={liHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <svg className="icon" aria-hidden="true">
+                          <use href="#i-linkedin" />
+                        </svg>
+                        <span id="linkedinText">{linkedin}</span>
+                      </a>
+                    )}
+
+                    {webHref && (
+                      <a
+                        className="phone-detail-item"
+                        id="websiteRow"
+                        href={webHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <svg className="icon" aria-hidden="true">
+                          <use href="#i-link" />
+                        </svg>
+                        <span id="websiteText">{website.replace(/^https?:\/\//, '')}</span>
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <p className="phone-preview-label">Live preview · Updates as you type</p>
+        </aside>
+      </div>
     </div>
   );
 }

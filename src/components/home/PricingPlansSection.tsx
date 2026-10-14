@@ -146,10 +146,10 @@ export default function PricingPlansSection({
 
                             <div className="text-right">
                               <span className="block text-xs text-zinc-500 line-through font-mono">
-                                <span className="currency-sym">₹</span>{tier.originalPrice}
+                                <span className="currency-sym">र</span>{tier.originalPrice}
                               </span>
                               <span className="block text-base sm:text-lg font-bold text-emerald-400 font-mono">
-                                <span className="currency-sym">₹</span>{tier.discountedPrice}
+                                <span className="currency-sym">र</span>{tier.discountedPrice}
                               </span>
                             </div>
                           </div>
@@ -186,7 +186,7 @@ export default function PricingPlansSection({
                   >
                     <span>
                       {isSelectedCard
-                        ? `SELECTED: ${activeTiers[card.id].toUpperCase()} (₹${
+                        ? `SELECTED: ${activeTiers[card.id].toUpperCase()} (र${
                             card.tiers.find((t) => t.duration === activeTiers[card.id])
                               ?.discountedPrice
                           })`

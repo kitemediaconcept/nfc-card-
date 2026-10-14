@@ -9,7 +9,18 @@ export async function GET(
   context: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await context.params;
-  const profile = await DataStore.getProfileBySlug(slug, true);
+  let profile = await DataStore.getProfileBySlug(slug, true);
+
+  if (!profile) {
+    const preview = request.nextUrl.searchParams.get('preview');
+    if (preview) {
+      try {
+        profile = JSON.parse(Buffer.from(preview, 'base64url').toString('utf-8'));
+      } catch {
+        // Ignored
+      }
+    }
+  }
 
   if (!profile) {
     return new NextResponse('Profile not found', { status: 404 });

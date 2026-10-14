@@ -7,12 +7,21 @@ export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ src?: string; cid?: string }>;
+  searchParams: Promise<{ src?: string; cid?: string; preview?: string }>;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const profile = await DataStore.getProfileBySlug(slug, true);
+  const { preview } = await searchParams;
+  let profile = await DataStore.getProfileBySlug(slug, true);
+
+  if (!profile && preview) {
+    try {
+      profile = JSON.parse(Buffer.from(preview, 'base64url').toString('utf-8'));
+    } catch {
+      // Ignored
+    }
+  }
 
   if (!profile) {
     return {
@@ -43,9 +52,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function PublicProfilePage({ params, searchParams }: PageProps) {
   const { slug } = await params;
-  const { src, cid } = await searchParams;
+  const { src, cid, preview } = await searchParams;
 
-  const profile = await DataStore.getProfileBySlug(slug, true);
+  let profile = await DataStore.getProfileBySlug(slug, true);
+
+  if (!profile && preview) {
+    try {
+      profile = JSON.parse(Buffer.from(preview, 'base64url').toString('utf-8'));
+    } catch {
+      // Ignored
+    }
+  }
 
   if (!profile) {
     notFound();

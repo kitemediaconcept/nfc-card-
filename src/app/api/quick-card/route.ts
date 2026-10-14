@@ -79,7 +79,45 @@ export async function POST(request: NextRequest) {
 
     const baseUrl = request.nextUrl.origin;
     const permanentNfcUrl = `${baseUrl}/c/${activeCard.card_token}`;
-    const profileUrl = `${baseUrl}/p/${profile.slug}`;
+    
+    // Compact preview token for stateless instantaneous edge rendering
+    const previewToken = Buffer.from(
+      JSON.stringify({
+        id: profile.id,
+        user_id: profile.user_id,
+        slug: profile.slug,
+        full_name: profile.full_name,
+        title: profile.title,
+        company_name: profile.company_name,
+        avatar_url: profile.avatar_url,
+        bio: profile.bio,
+        phone: profile.phone,
+        phone_visible: profile.phone_visible,
+        whatsapp: profile.whatsapp,
+        whatsapp_visible: profile.whatsapp_visible,
+        email: profile.email,
+        email_visible: profile.email_visible,
+        website: profile.website,
+        website_visible: profile.website_visible,
+        street: profile.street,
+        city: profile.city,
+        state: profile.state,
+        postal_code: profile.postal_code,
+        country: profile.country,
+        address_visible: profile.address_visible,
+        maps_url: profile.maps_url,
+        theme: profile.theme,
+        accent_color: profile.accent_color,
+        status: 'published',
+        section_order: profile.section_order,
+        social_links: profile.social_links,
+        custom_fields: profile.custom_fields,
+        services: profile.services,
+        portfolio: profile.portfolio,
+      })
+    ).toString('base64url');
+
+    const profileUrl = `${baseUrl}/p/${profile.slug}?preview=${previewToken}`;
 
     return NextResponse.json({
       success: true,

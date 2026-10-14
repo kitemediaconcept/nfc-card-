@@ -8,6 +8,7 @@ import {
   PlatformStats,
 } from '@/types';
 import { generateCardToken, generateActivationCode, generateSalt, hashActivationCode } from './crypto';
+import { createAdminClient } from './supabase/admin';
 
 // In-memory persistent demo store
 interface GlobalStore {
@@ -286,6 +287,31 @@ export const DataStore = {
   },
 
   async getProfileBySlug(slug: string, publicOnly = true): Promise<BusinessProfileData | null> {
+    // 1. Try Supabase if configured
+    const supabase = createAdminClient();
+    if (supabase) {
+      try {
+        let query = supabase.from('business_profiles').select('*').eq('slug', slug);
+        if (publicOnly) {
+          query = query.eq('status', 'published');
+        }
+        const { data, error } = await query.maybeSingle();
+        if (data && !error) {
+          if (publicOnly && data.published_snapshot) {
+            return {
+              ...data,
+              ...data.published_snapshot,
+              status: 'published',
+            } as BusinessProfileData;
+          }
+          return data as BusinessProfileData;
+        }
+      } catch (err) {
+        console.error('Supabase getProfileBySlug query error:', err);
+      }
+    }
+
+    // 2. Fallback to in-memory store
     const store = getStore();
     for (const profile of store.profiles.values()) {
       if (profile.slug.toLowerCase() === slug.toLowerCase()) {
@@ -357,6 +383,17 @@ export const DataStore = {
     };
 
     store.profiles.set(id, newProfile);
+
+    // Save to Supabase if configured
+    const supabase = createAdminClient();
+    if (supabase) {
+      try {
+        await supabase.from('business_profiles').upsert([newProfile]);
+      } catch (err) {
+        console.error('Supabase createProfile persist error:', err);
+      }
+    }
+
     return newProfile;
   },
 
@@ -385,6 +422,17 @@ export const DataStore = {
     }
 
     store.profiles.set(id, updated);
+
+    // Persist to Supabase if configured
+    const supabase = createAdminClient();
+    if (supabase) {
+      try {
+        await supabase.from('business_profiles').update(updated).eq('id', id);
+      } catch (err) {
+        console.error('Supabase updateProfile persist error:', err);
+      }
+    }
+
     return updated;
   },
 
@@ -407,6 +455,45 @@ export const DataStore = {
 
   // --- NFC CARDS ---
   async getCardByToken(token: string): Promise<NfcCard | null> {
+    // 1. Try Supabase if configured
+    const supabase = createAdminClient();
+    if (supabase) {
+      try {
+        const { data: card, error } = await supabase
+          .from('nfc_cards')
+          .select('*, business_profiles(*)')
+          .eq('card_token', token)
+          .maybeSingle();
+        if (card && !error) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const p = (card as any).business_profiles;
+          return {
+            id: card.id,
+            card_token: card.card_token,
+            card_label: card.card_label,
+            owner_id: card.owner_id,
+            assigned_profile_id: card.assigned_profile_id,
+            status: card.status,
+            created_at: card.created_at,
+            updated_at: card.updated_at,
+            claimed_at: card.claimed_at,
+            assigned_profile: p
+              ? {
+                  id: p.id,
+                  slug: p.slug,
+                  full_name: p.full_name,
+                  title: p.title,
+                  company_name: p.company_name,
+                }
+              : null,
+          } as NfcCard;
+        }
+      } catch (err) {
+        console.error('Supabase getCardByToken error:', err);
+      }
+    }
+
+    // 2. Fallback to in-memory store
     const store = getStore();
     for (const card of store.cards.values()) {
       if (card.card_token === token) {
@@ -573,6 +660,22 @@ export const DataStore = {
     }
 
     card.updated_at = new Date().toISOString();
+
+    const supabase = createAdminClient();
+    if (supabase) {
+      try {
+        await supabase.from('nfc_cards').update({
+          owner_id: card.owner_id,
+          assigned_profile_id: card.assigned_profile_id,
+          status: card.status,
+          claimed_at: card.claimed_at,
+          updated_at: card.updated_at,
+        }).eq('id', cardId);
+      } catch (err) {
+        console.error('Supabase updateCardAssignment error:', err);
+      }
+    }
+
     return card;
   },
 
@@ -760,6 +863,16 @@ export const DataStore = {
 
     store.cards.set(cardId, newCard);
     store.activations.set(cardId, newActivation);
+
+    const supabase = createAdminClient();
+    if (supabase) {
+      try {
+        await supabase.from('nfc_cards').insert([newCard]);
+        await supabase.from('card_activations').insert([newActivation]);
+      } catch (err) {
+        console.error('Supabase createAdminCard error:', err);
+      }
+    }
 
     // Audit log
     const adminUser = store.users.get(adminId);

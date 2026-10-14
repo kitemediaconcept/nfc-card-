@@ -220,6 +220,13 @@ export default function NFCInteractiveShowcase({ onPlanSelected }: NFCInteractiv
     }
 
     const stage = stageRef.current;
+    if (isMobile && nearest === 1) {
+      stage.style.opacity = '0';
+      stage.style.pointerEvents = 'none';
+    } else {
+      stage.style.opacity = '1';
+      stage.style.pointerEvents = 'auto';
+    }
     stage.style.transform = `translate3d(${x - stage.offsetWidth / 2}px, ${
       cardY - stage.offsetHeight / 2
     }px, 0) rotate(${rotation}deg)`;
@@ -505,9 +512,19 @@ export default function NFCInteractiveShowcase({ onPlanSelected }: NFCInteractiv
           </article>
         </div>
 
-        {/* Feature Visual Space (Anchor where the card glides on right) */}
-        <div className="min-h-[320px] grid place-items-center pointer-events-none" aria-hidden="true">
-          <div ref={featureAnchorRef} id="featureAnchor" className="w-px h-px" />
+        {/* Feature Visual Space (Desktop 3D card anchor + Mobile Minimal NFC Profile Showcase) */}
+        <div className="min-h-[320px] flex flex-col justify-center items-center" aria-hidden="true">
+          {/* Mobile Showcase: Replaces the plain black card on mobile screens */}
+          <div className="block md:hidden w-full max-w-[320px] sm:max-w-[360px] mx-auto py-2">
+            <img
+              src="/images/Minimal%20NFC%20Business%20Card%20Profile.png"
+              alt="Minimal NFC Business Card Profile"
+              className="w-full h-auto object-contain select-none mx-auto drop-shadow-xl"
+              loading="eager"
+            />
+          </div>
+
+          <div ref={featureAnchorRef} id="featureAnchor" className="w-px h-px opacity-0 pointer-events-none" />
         </div>
       </section>
 
@@ -711,11 +728,20 @@ export default function NFCInteractiveShowcase({ onPlanSelected }: NFCInteractiv
         id="customer-form-section"
         className="w-full py-6 md:py-12 bg-white overflow-hidden border-t border-[#f0f0f0]"
       >
-        <div className="w-full max-w-none flex justify-center items-center">
+        <div className="w-full max-w-none flex justify-center items-center px-4">
+          {/* Mobile: Minimal NFC Business Card Profile */}
+          <img
+            src="/images/Minimal%20NFC%20Business%20Card%20Profile.png"
+            alt="Minimal NFC Business Card Profile Experience"
+            className="w-full max-w-[360px] h-auto object-contain select-none block md:hidden py-4 drop-shadow-lg"
+            loading="eager"
+          />
+
+          {/* Desktop: Wide Contactless Banner */}
           <img
             src="/images/nfcmobile.png"
             alt="NFC Card Mobile Contactless Experience"
-            className="w-full h-auto object-contain select-none"
+            className="w-full h-auto object-contain select-none hidden md:block"
             loading="eager"
           />
         </div>

@@ -14,6 +14,7 @@ interface QuickCustomerCardCreatorProps {
     planName: string;
     method: string;
   } | null;
+  onClose?: () => void;
 }
 
 interface CreatedCardData {
@@ -40,7 +41,11 @@ export default function QuickCustomerCardCreator({
   selectedPlan,
   onChangePlan,
   paymentDetails,
+  onClose,
 }: QuickCustomerCardCreatorProps) {
+  // Mobile tab view toggle (switch between Form and Live Preview on mobile)
+  const [mobileTab, setMobileTab] = useState<'form' | 'preview'>('form');
+
   // Form fields matching the user's provided code and screenshot
   const [fullName, setFullName] = useState('Alex Carter');
   const [jobTitle, setJobTitle] = useState('Product Designer');
@@ -462,28 +467,32 @@ export default function QuickCustomerCardCreator({
         </defs>
       </svg>
 
-      {/* PAYMENT CONFIRMATION BADGE (DISPLAYED AFTER PAYMENT) */}
+      {/* PAYMENT CONFIRMATION BADGE (CLEAN & RESPONSIVE) */}
       {paymentDetails && (
-        <div className="max-w-[1320px] mx-auto px-7 pt-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 p-3 px-5 rounded-2xl bg-emerald-50/90 border border-emerald-200/80 text-emerald-950 shadow-sm">
-            <div className="flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
-                Payment Confirmed
-              </span>
-              <span className="text-xs font-semibold text-emerald-800">
-                • {paymentDetails.planName} (<span className="currency-sym">र</span>{paymentDetails.amount.toLocaleString()} via {paymentDetails.method})
-              </span>
-              <span className="text-[11px] font-mono text-emerald-700 hidden sm:inline">
-                ID: {paymentDetails.transactionId}
-              </span>
+        <div className="w-full mb-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 sm:px-5 sm:py-3 rounded-2xl bg-emerald-50/90 border border-emerald-200/80 text-emerald-950 shadow-sm">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
+                    Payment Confirmed
+                  </span>
+                  <span className="text-xs font-semibold text-emerald-900">
+                    • {paymentDetails.planName} (<span className="currency-sym">₹</span>{paymentDetails.amount.toLocaleString()} via {paymentDetails.method})
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono text-emerald-700 block mt-0.5">
+                  ID: {paymentDetails.transactionId}
+                </span>
+              </div>
             </div>
 
             {onChangePlan && (
               <button
                 type="button"
                 onClick={onChangePlan}
-                className="text-xs font-semibold text-emerald-800 hover:text-emerald-950 underline underline-offset-4"
+                className="self-start sm:self-auto text-xs font-semibold text-emerald-800 hover:text-emerald-950 underline underline-offset-4 shrink-0"
               >
                 Change Plan
               </button>
@@ -492,9 +501,43 @@ export default function QuickCustomerCardCreator({
         </div>
       )}
 
+      {/* MOBILE SEGMENTED CONTROL (SWITCH BETWEEN FORM AND PHONE PREVIEW ON SMALL SCREENS) */}
+      <div className="flex md:hidden p-1 bg-neutral-100 rounded-xl mb-5">
+        <button
+          type="button"
+          onClick={() => setMobileTab('form')}
+          className={`flex-1 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+            mobileTab === 'form'
+              ? 'bg-white text-neutral-900 shadow-sm'
+              : 'text-neutral-500 hover:text-neutral-900'
+          }`}
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+          </svg>
+          <span>Edit Form</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('preview')}
+          className={`flex-1 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+            mobileTab === 'preview'
+              ? 'bg-white text-neutral-900 shadow-sm'
+              : 'text-neutral-500 hover:text-neutral-900'
+          }`}
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+            <path d="M12 18h.01" />
+          </svg>
+          <span>Live Phone Preview</span>
+        </button>
+      </div>
+
       {/* MAIN 2-COLUMN LAYOUT: FORM ON LEFT, PHONE PREVIEW ON RIGHT */}
       <div className="nfc-profile-layout">
-        <section>
+        <section className={`w-full min-w-0 ${mobileTab === 'form' ? 'block' : 'hidden md:block'}`}>
           <h1>Create your profile</h1>
           <p className="profile-subtitle">Your details. One simple tap.</p>
 
@@ -736,8 +779,30 @@ export default function QuickCustomerCardCreator({
               </div>
             </div>
 
+            {/* Mobile preview shortcut button */}
+            <button
+              type="button"
+              onClick={() => setMobileTab('preview')}
+              className="md:hidden w-full py-2.5 px-4 mb-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+                <path d="M12 18h.01" />
+              </svg>
+              <span>See Live Phone Preview ({fullName || 'Profile'})</span>
+            </button>
+
             {/* ACTION BUTTONS */}
             <div className="profile-actions">
+              {onClose && (
+                <button
+                  type="button"
+                  className="profile-button"
+                  onClick={onClose}
+                >
+                  Close
+                </button>
+              )}
               <button
                 type="button"
                 className="profile-button"
@@ -831,7 +896,11 @@ export default function QuickCustomerCardCreator({
         </section>
 
         {/* RIGHT COLUMN: STICKY IPHONE PREVIEW */}
-        <aside className="phone-preview-column" id="preview" aria-label="Live profile preview">
+        <aside
+          className={`phone-preview-column ${mobileTab === 'preview' ? 'block' : 'hidden md:block'}`}
+          id="preview"
+          aria-label="Live profile preview"
+        >
           <div className="phone-device">
             <div className="phone-screen">
               {/* STATUS BAR + DYNAMIC ISLAND */}
@@ -1021,6 +1090,19 @@ export default function QuickCustomerCardCreator({
           </div>
 
           <p className="phone-preview-label">Live preview · Updates as you type</p>
+
+          {/* Back to Edit Form button on mobile */}
+          <button
+            type="button"
+            onClick={() => setMobileTab('form')}
+            className="md:hidden w-full max-w-[320px] mx-auto py-3 px-4 mt-5 rounded-xl bg-neutral-900 text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+            <span>Back to Edit Form</span>
+          </button>
         </aside>
       </div>
     </div>

@@ -71,6 +71,18 @@ export default function NFCInteractiveShowcase({ onPlanSelected }: NFCInteractiv
     };
   }, []);
 
+  // Lock background scroll when modal is active
+  useEffect(() => {
+    if (isProfileModalOpen || isCheckoutOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isProfileModalOpen, isCheckoutOpen]);
+
   // Stage & Tilt refs for 60fps GPU transforms
   const stageRef = useRef<HTMLDivElement>(null);
   const tiltRef = useRef<HTMLDivElement>(null);
@@ -274,7 +286,7 @@ export default function NFCInteractiveShowcase({ onPlanSelected }: NFCInteractiv
       {/* 1. NFC FLOATING NAV BAR (Matches user code & screenshot) */}
       <header
         ref={headerRef}
-        className={`nfc-header is-ready ${menuOpen ? 'is-open' : ''} ${isScrolled ? 'is-scrolled' : ''}`}
+        className={`nfc-header is-ready ${menuOpen ? 'is-open' : ''} ${isScrolled ? 'is-scrolled' : ''} ${isProfileModalOpen || isCheckoutOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
       >
         <nav className="nfc-nav" aria-label="Main navigation">
           <a
@@ -731,26 +743,53 @@ export default function NFCInteractiveShowcase({ onPlanSelected }: NFCInteractiv
 
       {/* Profile Creator Modal */}
       {isProfileModalOpen && paymentDetails && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 md:p-8 animate-in fade-in">
-          <div className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl p-6 md:p-10 my-8 overflow-hidden max-h-[92vh] overflow-y-auto">
-            <button
-              type="button"
-              onClick={() => setIsProfileModalOpen(false)}
-              className="absolute top-6 right-6 w-10 h-10 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 grid place-items-center transition-all z-20"
-              aria-label="Close profile setup"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
-            <QuickCustomerCardCreator
-              selectedPlan={selectedPlanState}
-              onChangePlan={() => {
-                setIsProfileModalOpen(false);
-                scrollToSection('pricing');
-              }}
-              paymentDetails={paymentDetails}
-            />
+        <div
+          className="fixed inset-0 z-[2500] flex flex-col justify-end sm:justify-center sm:items-center bg-black/60 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setIsProfileModalOpen(false)}
+        >
+          <div
+            className="relative w-full h-[100dvh] sm:h-auto sm:max-h-[92vh] sm:max-w-5xl bg-white sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 sm:my-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Sticky Header: ALWAYS visible on mobile & desktop, never blocked by navbar or scrolled away */}
+            <div className="sticky top-0 z-30 flex items-center justify-between px-4 py-3 sm:px-8 sm:py-4 bg-white/95 backdrop-blur-md border-b border-neutral-100 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-neutral-900 text-white flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="7" r="4" />
+                    <path d="M4 21v-2a8 8 0 0 1 16 0v2Z" />
+                  </svg>
+                </div>
+                <div className="truncate">
+                  <h2 className="text-sm sm:text-base font-bold text-neutral-900 truncate m-0">Create your profile</h2>
+                  <p className="text-[11px] text-neutral-500 truncate m-0">NFC Smart Card Setup</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsProfileModalOpen(false)}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 flex items-center justify-center transition-all shrink-0 active:scale-95 shadow-sm"
+                aria-label="Close profile setup"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Scrollable Modal Body */}
+            <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-8 sm:py-8">
+              <QuickCustomerCardCreator
+                selectedPlan={selectedPlanState}
+                onChangePlan={() => {
+                  setIsProfileModalOpen(false);
+                  scrollToSection('pricing');
+                }}
+                paymentDetails={paymentDetails}
+                onClose={() => setIsProfileModalOpen(false)}
+              />
+            </div>
           </div>
         </div>
       )}

@@ -85,9 +85,9 @@ export default function PaymentCheckoutModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[2600] flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
       <div
-        className="relative w-full max-w-[480px] bg-white rounded-[28px] border border-neutral-200 shadow-2xl overflow-hidden flex flex-col"
+        className="relative w-full max-w-[480px] max-h-[94vh] overflow-y-auto bg-white rounded-[28px] border border-neutral-200 shadow-2xl flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
